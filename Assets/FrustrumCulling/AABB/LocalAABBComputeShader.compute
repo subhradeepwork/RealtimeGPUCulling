@@ -1,0 +1,28 @@
+#pragma kernel CSMain
+
+StructuredBuffer<float3> vertexPositions; // Input vertex positions
+RWStructuredBuffer<float3> intermediateMin; // Intermediate min values
+RWStructuredBuffer<float3> intermediateMax; // Intermediate max values
+
+uint numVertices;
+
+[numthreads(256, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID) {
+    uint index = id.x;
+    if (index >= numVertices) return;
+
+    float3 vertexPosition = vertexPositions[index];
+    float3 localMin = vertexPosition;
+    float3 localMax = vertexPosition;
+
+    // Loop over a subset of vertices handled by this thread
+    for(uint i = index + 1; i < min(numVertices, index + 256); ++i) {
+        vertexPosition = vertexPositions[i];
+        localMin = min(localMin, vertexPosition);
+        localMax = max(localMax, vertexPosition);
+    }
+
+    // Write local min/max to intermediate buffers
+    intermediateMin[index / 256] = localMin;
+    intermediateMax[index / 256] = localMax;
+}

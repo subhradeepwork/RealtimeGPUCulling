@@ -1,0 +1,56 @@
+// FrustumCullingCompute.compute
+
+#pragma kernel CSMain
+
+// Define the number of frustum planes (6 for a typical camera frustum)
+#define NUM_FRUSTUM_PLANES 6
+
+// Struct to hold a frustum plane (normal and distance)
+struct Plane {
+    float4 normalAndDistance;
+};
+
+// Input buffers for the AABB min and max points
+StructuredBuffer<float3> aabbMin;
+StructuredBuffer<float3> aabbMax;
+
+// Input buffer for the camera's frustum planes
+StructuredBuffer<Plane> frustumPlanes;
+
+// Output buffer for visibility results (1 for visible, 0 for not visible)
+RWStructuredBuffer<int> visibilityResults;
+
+// Helper function to test if an AABB is inside or intersecting the frustum
+int IsAABBInsideFrustum(float3 minPoint, float3 maxPoint, StructuredBuffer<Plane> planes) {
+    for (int i = 0; i < NUM_FRUSTUM_PLANES; ++i) {
+        float3 normal = planes[i].normalAndDistance.xyz;
+        float distance = planes[i].normalAndDistance.w;
+
+        // Determine the positive vertex with respect to the plane normal
+        float3 positiveVertex = float3(
+            normal.x > 0.0 ? maxPoint.x : minPoint.x,
+            normal.y > 0.0 ? maxPoint.y : minPoint.y,
+            normal.z > 0.0 ? maxPoint.z : minPoint.z
+        );
+
+        // If the positive vertex is behind the plane, the AABB is outside the frustum
+        if (dot(normal, positiveVertex) + distance < 0.0) {
+            return 0; // Not visible
+        }
+    }
+    return 1; // Visible
+}
+
+[numthreads(64, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= aabbMin.Length) return;
+
+    float3 minPoint = aabbMin[id.x];
+    float3 maxPoint = aabbMax[id.x];
+
+    // Determine if the AABB is inside the frustum
+    int isVisible = IsAABBInsideFrustum(minPoint, maxPoint, frustumPlanes);
+
+    // Write the visibility result
+    visibilityResults[id.x] = isVisible;
+}
